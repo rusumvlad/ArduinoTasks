@@ -1,0 +1,135 @@
+//PUNCTUL 1
+void setup() {
+  DDRB |= 0x01;  // set pin13 to output without affecting other pins
+    // above is identical to pinMode(LEDPIN, OUTPUT); using Direct Port Manipulation
+    cli();
+    TCCR1A = 0; 
+    TCCR1B = 0;
+    OCR1A = 15625;  // = (target time / timer resolution) - 1 or 1 / 6.4e-5 - 1 = 15624
+    //15624
+    TCCR1B |= (1 << CS10) | (1<<CS12);// Set CS10 and CS12 bits for 1024 prescaler:
+   
+    TCCR1B |= (1 << WGM12);
+    TIMSK1 |= (1 << OCIE1A);// timer compare intrupt
+    sei();
+
+}
+
+ISR(TIMER1_COMPA_vect)
+{
+  PORTB ^= 0x01;
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+
+}
+//Punctul 2
+ int contor=1;
+int main()
+{
+  int pwm_state=0;
+  DDRD|=0x04;
+  
+  cli();
+  TCCR1A=0;
+  TCCR1B=0;
+  OCR1A = 15625;
+  TCCR1B |= (1 << CS10) | (1<<CS12);
+  TIMSK1|=(1<<TOIE1);
+  sei();
+
+
+  DDRD|=1<<6;
+
+  TCCR0A|=1<<COM0A1;
+  TCCR0A|=1<<WGM01 | 1<<WGM00;
+  TCCR0B|=1<<CS02 | 1<<CS00;
+  OCR0A=200;
+  while (1)
+{
+  if (contor>100)
+      {PORTD^=0x04;
+      contor=0;
+       pwm_state++;
+       if (pwm_state>3)
+          pwm_state=0;
+          }
+
+    if (pwm_state==0)      
+      OCR0A=contor*2;
+      else if (pwm_state==1)
+      OCR0A=200;
+            else if (pwm_state==2)
+            OCR0A=200-contor*2;
+              else if (pwm_state==3)
+                OCR0A=0;
+}
+}
+
+ISR(TIMER1_OVF_vect)
+{
+  
+  contor++;
+ PORTD^=0x04;
+}
+//Punctul 3
+void setup()
+{
+  UCSR0C|= (1 << UCSZ00) | (1 << UCSZ01);
+  UBRR0 = 103;
+  UCSR0A|= (1 << UDRE0);
+  UCSR0B|= (1 << RXEN0) | (1 << TXEN0);
+  DDRB|=0X01;
+  
+}
+unsigned char USART_receive(void){
+ while(!(UCSR0A & (1<<RXC0)));
+ return UDR0;
+ } 
+
+
+
+void USART_send_one_character(unsigned char data)
+{
+while( !( UCSR0A & (1<<UDRE0)) );
+UDR0 = data;
+}
+
+void loop()
+{
+  if(USART_receive()==0x41) PORTB|=0X01;
+  else if(USART_receive()==0x53) PORTB&=~0x01;
+}
+//Punctul 4
+void adc_init() //adc initialization
+{ADCSRA |= ((1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0)); 
+ADMUX |= (1<<REFS0); //AVcc with external capacitor at Aref pin ADCSRA |= (1«ADEN); //enable ADC
+ADCSRA |= (1<<ADSC); //ADC start conversion
+}
+
+uint16_t read_adc(uint8_t channel) //read ADC function
+{
+ADMUX &= 0xF0;//set input AO to A5
+ADMUX |= channel;//select chanel AO to A5
+ADCSRA |= (1<<ADSC);//start conversion
+while (ADCSRA & (1<<ADSC));//wait while adc conversion are not updated 
+return ADC; //read and return 
+}
+void setup() {
+  
+  DDRB=0x20;
+  adc_init();
+}
+int x;
+void loop() {
+  
+    x=read_adc(0);
+  x=x*5000/1023;
+  if(x>=35)
+    PORTB|=0x20;
+  else if(x<=34.5)
+    PORTB&=~0x20;
+  
+  
+}
