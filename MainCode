@@ -1,110 +1,7 @@
-//PUNCTUL 1
-void setup() {
-  DDRB |= 0x01;  // set pin13 to output without affecting other pins
-    // above is identical to pinMode(LEDPIN, OUTPUT); using Direct Port Manipulation
-    cli();
-    TCCR1A = 0; 
-    TCCR1B = 0;
-    OCR1A = 15625;  // = (target time / timer resolution) - 1 or 1 / 6.4e-5 - 1 = 15624
-    //15624
-    TCCR1B |= (1 << CS10) | (1<<CS12);// Set CS10 and CS12 bits for 1024 prescaler:
-   
-    TCCR1B |= (1 << WGM12);
-    TIMSK1 |= (1 << OCIE1A);// timer compare intrupt
-    sei();
-
-}
-
-ISR(TIMER1_COMPA_vect)
-{
-  PORTB ^= 0x01;
-}
-
-void loop() {
-  // put your main code here, to run repeatedly:
-
-}
-//Punctul 2
- int contor=1;
-int main()
-{
-  int pwm_state=0;
-  DDRD|=0x04;
-  
-  cli();
-  TCCR1A=0;
-  TCCR1B=0;
-  OCR1A = 15625;
-  TCCR1B |= (1 << CS10) | (1<<CS12);
-  TIMSK1|=(1<<TOIE1);
-  sei();
-
-
-  DDRD|=1<<6;
-
-  TCCR0A|=1<<COM0A1;
-  TCCR0A|=1<<WGM01 | 1<<WGM00;
-  TCCR0B|=1<<CS02 | 1<<CS00;
-  OCR0A=200;
-  while (1)
-{
-  if (contor>100)
-      {PORTD^=0x04;
-      contor=0;
-       pwm_state++;
-       if (pwm_state>3)
-          pwm_state=0;
-          }
-
-    if (pwm_state==0)      
-      OCR0A=contor*2;
-      else if (pwm_state==1)
-      OCR0A=200;
-            else if (pwm_state==2)
-            OCR0A=200-contor*2;
-              else if (pwm_state==3)
-                OCR0A=0;
-}
-}
-
-ISR(TIMER1_OVF_vect)
-{
-  
-  contor++;
- PORTD^=0x04;
-}
-//Punctul 3
-void setup()
-{
-  UCSR0C|= (1 << UCSZ00) | (1 << UCSZ01);
-  UBRR0 = 103;
-  UCSR0A|= (1 << UDRE0);
-  UCSR0B|= (1 << RXEN0) | (1 << TXEN0);
-  DDRB|=0X01;
-  
-}
-unsigned char USART_receive(void){
- while(!(UCSR0A & (1<<RXC0)));
- return UDR0;
- } 
-
-
-
-void USART_send_one_character(unsigned char data)
-{
-while( !( UCSR0A & (1<<UDRE0)) );
-UDR0 = data;
-}
-
-void loop()
-{
-  if(USART_receive()==0x41) PORTB|=0X01;
-  else if(USART_receive()==0x53) PORTB&=~0x01;
-}
-//Punctul 4
 void adc_init() //adc initialization
 {ADCSRA |= ((1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0)); 
-ADMUX |= (1<<REFS0); //AVcc with external capacitor at Aref pin ADCSRA |= (1«ADEN); //enable ADC
+ADMUX |= (1<<REFS0); //AVcc with external capacitor at Aref pin 
+ADCSRA |= (1<<ADEN); //enable ADC
 ADCSRA |= (1<<ADSC); //ADC start conversion
 }
 
@@ -114,22 +11,95 @@ ADMUX &= 0xF0;//set input AO to A5
 ADMUX |= channel;//select chanel AO to A5
 ADCSRA |= (1<<ADSC);//start conversion
 while (ADCSRA & (1<<ADSC));//wait while adc conversion are not updated 
-return ADC; //read and return 
+return ADCW; //read and return 
 }
-void setup() {
+//Initializare serial
+void init_ser()
+{
+  UCSR0A=0;
+  UCSR0B=0;
+  UCSR0C=0;
+  UBRR0 = 103; // 16MHZ/16*9600 -1 = aprox 103
+  UCSR0B|= (1 << RXEN0); //valideaza receptia si trans datelor
+  UCSR0C|= (1 << UCSZ01) | (1 << UCSZ00); // fara paritate , 8 bits, mod asincron
+  UCSR0A|= (1 << UDRE0);
   
-  DDRB=0x20;
-  adc_init();
 }
-int x;
-void loop() {
+unsigned char USART_receive(){
+ if((UCSR0A & (1<<RXC0))) // return o val diferita de null 
+ return UDR0;
+ else
+ return 0;
+ } 
+
+//Initializare PWM
+int i=0,j=0,lum=0;
+void init_PWM(){
+  TCCR0A |= (1<<WGM00)|(1<<WGM01)|(1<<COM0A1); //activare fast PWM
+  TCCR0B = 1;
+  OCR0A = 0;
+}
+//Initiez timer
+void init_tim1(){
+  cli();   //opreste intrerup
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1  = 0;
+  OCR1A = 62500/128;            // setam valoarea maxima =16000000/256/128
+  TCCR1B |= (1 << WGM12);   // CTC mode
+  TCCR1B |= (1 << CS12);    // prescaler de 256 biti
+  TIMSK1 |= (1 << OCIE1A);  // porneste intreruperile timerului la comparare
+  sei();             // porneste intrerup
+}
+//Pentru a face fade cu ajutorul PWM
+ISR(TIMER1_COMPA_vect){
+  j++;
+  i++;
+  if(j==128){
+    PORTB ^= (1<<5);
+    j=0;
+  }
+  if(i<=128){  //fade in / prima secunda
+    OCR0A=lum;
+    lum+=2;
+  }
+  if(i>128 && i<=256){  //ramane aprins/ a doua secunda
+    OCR0A=255;
+  }
+  if(i>256 && i<=384){ //fade out/ secunda number tri
+    OCR0A=lum;
+    lum-=2;
+  }
+  if(i>384 && i<=512){ //ramane stins / ultima secunda
+    OCR0A=0;
+  }
+  if(i>512){  //se da reset 
+    i=0;
+  }
   
+}
+int main()
+{
+ DDRD=(1<<6);
+ DDRB=(1<<0)|(1<<4)|(1<<5);
+ adc_init();
+ init_PWM();
+ init_tim1();
+ init_ser();
+
+  float x;
+while(1)//loop infinit
+{
+  char c=USART_receive(); 
+  if(c==0x41) PORTB|=(1<<4);//pentru tasta A in hexa se aprinde ledul
+  else if(c==0x53) PORTB&=~(1<<4);  //pentru tasta S in hexa se stinge ledul
+   
     x=read_adc(0);
-  x=x*5000/1023;
-  if(x>=35)
-    PORTB|=0x20;
-  else if(x<=34.5)
-    PORTB&=~0x20;
-  
-  
+  x=x*488/1000;//umax-umin/(2^10-1)=1 grad
+  PORTB|=(1<<4);
+  if(x>=28)//daca sunt mai mult sau egal de 28 de grade se aprinde ledul
+    PORTB|=(1<<0);
+  else if(x<28)//daca sunt mai putin de 28 de grade ledul ramane stins
+    PORTB&=~(1<<0);
+}
 }
